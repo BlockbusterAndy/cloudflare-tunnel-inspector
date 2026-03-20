@@ -1,4 +1,4 @@
-# Design System Specification: The Kinetic Inspector
+# Design System Specification: Tunnel Inspector
 
 ## 1. Overview & Creative North Star
 **Creative North Star: "The Obsidian Lens"**

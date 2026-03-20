@@ -4,6 +4,8 @@ A real-time HTTP traffic inspector for Cloudflare Tunnels. It works like ngrok's
 
 > All traffic is inspected locally and never leaves your machine.
 
+![Landing Page](public/images/Home.png)
+
 ## How It Works
 
 ```
@@ -70,13 +72,19 @@ Three tabs for each captured request:
 - Side-by-side request and response headers
 - Response body preview
 
+![Overview Tab](public/images/OverviewTab.png)
+
 **Request**
 - Full request headers
 - Request body with format-aware rendering
 
+![Request Tab](public/images/RequestTab.png)
+
 **Response**
 - Full response headers
 - Response body with format-aware rendering
+
+![Response Tab](public/images/ResponseTab.png)
 
 ### Body Viewer & Syntax Highlighting
 The body viewer auto-detects content format and applies syntax highlighting:

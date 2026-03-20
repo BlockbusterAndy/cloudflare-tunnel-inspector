@@ -14,7 +14,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "The Kinetic Inspector",
+  title: "Tunnel Inspector",
   description: "Cloudflare Tunnel traffic inspector",
 };
 
