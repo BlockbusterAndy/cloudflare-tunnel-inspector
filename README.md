@@ -227,32 +227,7 @@ The UI follows the **"Obsidian Lens"** design specification (see [DESIGN.md](DES
 
 ## Contributing
 
-Contributions are welcome and encouraged! Whether it's a bug fix, a new feature, improved documentation, or a fresh idea — we'd love your help making Tunnel Inspector better.
-
-### How to Contribute
-
-1. **Fork** the repository
-2. **Create a branch** for your feature or fix:
-   ```bash
-   git checkout -b feat/your-feature-name
-   ```
-3. **Make your changes** — follow the existing code style and the design system in [Design.md](Design.md)
-4. **Test locally** by running `npm run dev:inspect` and verifying everything works
-5. **Commit** with a clear, descriptive message
-6. **Push** your branch and open a **Pull Request**
-
-### Ideas for Contributions
-
-- WebSocket traffic inspection
-- Export/import captured traffic (HAR format)
-- Request replay functionality
-- Advanced filtering (by status code, response time, content type)
-- Persistent storage option for captured requests
-- Dark/light theme toggle
-- Performance improvements for high-traffic scenarios
-- Documentation improvements and examples
-
-### Reporting Issues
+Contributions are welcome and encouraged! See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, coding guidelines, and ideas for what to work on.
 
 Found a bug or have a suggestion? [Open an issue](../../issues) with a clear description and steps to reproduce.
 
