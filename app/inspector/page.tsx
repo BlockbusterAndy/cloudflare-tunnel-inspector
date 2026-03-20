@@ -340,21 +340,70 @@ function FormDataViewer({ text }: { text: string }) {
   );
 }
 
+// ── HTML preview ──────────────────────────────────────────────────────
+
+function HtmlPreview({ html, baseUrl }: { html: string; baseUrl?: string }) {
+  const doc = useMemo(() => {
+    // Inject a <base> tag so relative URLs (stylesheets, images) resolve correctly
+    if (!baseUrl) return html;
+    try {
+      const origin = new URL(baseUrl).origin;
+      const baseTag = `<base href="${origin}/">`;
+      // Insert after <head> if present, otherwise prepend
+      if (/<head[\s>]/i.test(html)) {
+        return html.replace(/(<head[^>]*>)/i, `$1${baseTag}`);
+      }
+      return baseTag + html;
+    } catch {
+      return html;
+    }
+  }, [html, baseUrl]);
+
+  return (
+    <iframe
+      srcDoc={doc}
+      sandbox="allow-same-origin allow-scripts"
+      className="w-full rounded-md border border-border bg-white"
+      style={{ minHeight: 300 }}
+      title="HTML Preview"
+    />
+  );
+}
+
 // ── Body viewer ───────────────────────────────────────────────────────
 
-function BodyViewer({ body, contentType }: { body: unknown; contentType?: string }) {
+function BodyViewer({ body, contentType, baseUrl }: { body: unknown; contentType?: string; baseUrl?: string }) {
+  const [preview, setPreview] = useState(false);
+
   if (body === null || body === undefined)
     return <p className="text-sm italic text-muted-foreground">No body</p>;
 
   const format = detectFormat(body, contentType);
   const label = FORMAT_LABELS[format];
   const badgeCls = FORMAT_BADGE_CLASS[format];
+  const isHtml = format === "html";
+
+  const toolbar = (
+    <div className="flex items-center gap-2">
+      <Badge className={`text-[10px] ${badgeCls}`}>{label}</Badge>
+      {isHtml && (
+        <Button
+          variant={preview ? "default" : "outline"}
+          size="sm"
+          className="h-5 text-[10px] px-2"
+          onClick={() => setPreview((p) => !p)}
+        >
+          {preview ? "Source" : "Preview"}
+        </Button>
+      )}
+    </div>
+  );
 
   // For JSON objects, render with JsonValue
   if (format === "json" && typeof body === "object") {
     return (
       <div className="space-y-2">
-        <Badge className={`text-[10px] ${badgeCls}`}>{label}</Badge>
+        {toolbar}
         <pre className="font-mono text-sm text-foreground/80 whitespace-pre overflow-auto rounded-md bg-muted/50 p-3">
           <JsonValue value={body} />
         </pre>
@@ -370,7 +419,7 @@ function BodyViewer({ body, contentType }: { body: unknown; contentType?: string
       const parsed = JSON.parse(text);
       return (
         <div className="space-y-2">
-          <Badge className={`text-[10px] ${badgeCls}`}>{label}</Badge>
+          {toolbar}
           <pre className="font-mono text-sm text-foreground/80 whitespace-pre overflow-auto rounded-md bg-muted/50 p-3">
             <JsonValue value={parsed} />
           </pre>
@@ -382,10 +431,20 @@ function BodyViewer({ body, contentType }: { body: unknown; contentType?: string
   if (format === "form-data") {
     return (
       <div className="space-y-2">
-        <Badge className={`text-[10px] ${badgeCls}`}>{label}</Badge>
+        {toolbar}
         <div className="rounded-md bg-muted/50 p-3">
           <FormDataViewer text={text} />
         </div>
+      </div>
+    );
+  }
+
+  // HTML preview mode
+  if (isHtml && preview) {
+    return (
+      <div className="space-y-2">
+        {toolbar}
+        <HtmlPreview html={text} baseUrl={baseUrl} />
       </div>
     );
   }
@@ -398,7 +457,7 @@ function BodyViewer({ body, contentType }: { body: unknown; contentType?: string
 
   return (
     <div className="space-y-2">
-      <Badge className={`text-[10px] ${badgeCls}`}>{label}</Badge>
+      {toolbar}
       <pre className="font-mono text-sm text-foreground/80 whitespace-pre overflow-auto rounded-md bg-muted/50 p-3">
         {highlighter}
       </pre>
@@ -512,7 +571,7 @@ function DetailPanel({ req }: { req: InspectorRequest }) {
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
             Body
           </h3>
-          <BodyViewer body={req.reqBody} contentType={req.reqHeaders["content-type"] ?? req.reqHeaders["Content-Type"]} />
+          <BodyViewer body={req.reqBody} contentType={req.reqHeaders["content-type"] ?? req.reqHeaders["Content-Type"]} baseUrl={req.url} />
         </div>
       </TabsContent>
 
@@ -528,7 +587,7 @@ function DetailPanel({ req }: { req: InspectorRequest }) {
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
             Body
           </h3>
-          <BodyViewer body={req.resBody} contentType={req.resHeaders["content-type"] ?? req.resHeaders["Content-Type"]} />
+          <BodyViewer body={req.resBody} contentType={req.resHeaders["content-type"] ?? req.resHeaders["Content-Type"]} baseUrl={req.url} />
         </div>
       </TabsContent>
     </Tabs>
