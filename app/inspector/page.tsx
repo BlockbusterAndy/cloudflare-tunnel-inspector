@@ -1,131 +1,340 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   useInspectorFeed,
   type InspectorRequest,
 } from "../../hooks/useInspectorFeed";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-
 // ── Helpers ────────────────────────────────────────────────────────────
 
-const METHOD_VARIANTS: Record<string, string> = {
-  GET: "bg-blue-500/15 text-blue-400 border-blue-500/25",
-  POST: "bg-amber-500/15 text-amber-400 border-amber-500/25",
-  PUT: "bg-teal-500/15 text-teal-400 border-teal-500/25",
-  DELETE: "bg-red-500/15 text-red-400 border-red-500/25",
-  PATCH: "bg-purple-500/15 text-purple-400 border-purple-500/25",
+const METHOD_COLORS: Record<string, { text: string; border: string; label: string }> = {
+  GET: { text: "text-[#4fdbc8]", border: "border-[#4fdbc8]/20", label: "GET" },
+  POST: { text: "text-[#f59e0b]", border: "border-[#f59e0b]/20", label: "POST" },
+  PUT: { text: "text-[#60a5fa]", border: "border-[#60a5fa]/20", label: "PUT" },
+  DELETE: { text: "text-[#ffb4ab]", border: "border-[#ffb4ab]/20", label: "DEL" },
+  PATCH: { text: "text-[#c084fc]", border: "border-[#c084fc]/20", label: "PATCH" },
 };
 
-function methodBadgeClass(m: string) {
-  return METHOD_VARIANTS[m] ?? "bg-muted text-muted-foreground border-border";
+function getMethodStyle(m: string) {
+  return METHOD_COLORS[m] ?? { text: "text-[#908fa0]", border: "border-[#464554]/20", label: m };
 }
 
-function statusBadgeClass(s: number) {
-  if (s >= 500) return "bg-red-500/15 text-red-400 border-red-500/25";
-  if (s >= 400) return "bg-amber-500/15 text-amber-400 border-amber-500/25";
-  return "bg-emerald-500/15 text-emerald-400 border-emerald-500/25";
+function getStatusStyle(s: number) {
+  if (s >= 500) return { text: "text-[#ffb4ab]", bg: "bg-[#ffb4ab]" };
+  if (s >= 400) return { text: "text-[#f59e0b]", bg: "bg-[#f59e0b]" };
+  if (s >= 300) return { text: "text-[#60a5fa]", bg: "bg-[#60a5fa]" };
+  return { text: "text-[#4fdbc8]", bg: "bg-[#4fdbc8]" };
 }
 
-function statusFilterMatch(status: number, filter: string) {
-  if (filter === "all") return true;
-  if (filter === "2xx") return status >= 200 && status < 300;
-  if (filter === "4xx") return status >= 400 && status < 500;
-  if (filter === "5xx") return status >= 500;
-  return true;
+function getStatusText(s: number) {
+  const map: Record<number, string> = {
+    200: "OK", 201: "Created", 204: "No Content", 301: "Moved", 304: "Not Modified",
+    400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found",
+    500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable",
+  };
+  return map[s] ?? "";
 }
+
+function formatBytes(bytes: number | undefined) {
+  if (!bytes) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  return `${(bytes / 1024).toFixed(1)} KB`;
+}
+
+type MethodFilter = "All" | "GET" | "POST" | "PUT" | "DELETE";
 
 // ── Content-type detection ─────────────────────────────────────────────
 
-type BodyFormat = "json" | "html" | "xml" | "javascript" | "graphql" | "form-data" | "text";
+type BodyFormat = "json" | "graphql-json" | "html" | "xml" | "javascript" | "graphql" | "form-data" | "multipart" | "text";
+
+function isGraphqlJson(body: unknown): boolean {
+  if (typeof body === "object" && body !== null && "query" in body) {
+    const q = (body as Record<string, unknown>).query;
+    return typeof q === "string" && /^\s*(query|mutation|subscription|fragment|\{)/.test(q);
+  }
+  return false;
+}
 
 function detectFormat(body: unknown, contentType?: string): BodyFormat {
-  if (typeof body === "object" && body !== null) return "json";
+  if (typeof body === "object" && body !== null) {
+    if (isGraphqlJson(body)) return "graphql-json";
+    return "json";
+  }
 
   const ct = contentType?.toLowerCase() ?? "";
-  if (ct.includes("application/json")) return "json";
+  if (ct.includes("application/json")) {
+    if (typeof body === "string") {
+      try {
+        const parsed = JSON.parse(body);
+        if (isGraphqlJson(parsed)) return "graphql-json";
+      } catch { /* not json */ }
+    }
+    return "json";
+  }
   if (ct.includes("text/html")) return "html";
   if (ct.includes("application/xml") || ct.includes("text/xml")) return "xml";
   if (ct.includes("javascript") || ct.includes("ecmascript")) return "javascript";
   if (ct.includes("graphql")) return "graphql";
   if (ct.includes("application/x-www-form-urlencoded")) return "form-data";
+  if (ct.includes("multipart/form-data")) return "multipart";
 
-  // Heuristic detection from string content
   if (typeof body === "string") {
     const trimmed = body.trimStart();
     if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-      try { JSON.parse(trimmed); return "json"; } catch { /* not json */ }
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (isGraphqlJson(parsed)) return "graphql-json";
+        return "json";
+      } catch { /* not json */ }
     }
     if (trimmed.startsWith("<!DOCTYPE") || trimmed.startsWith("<html")) return "html";
     if (trimmed.startsWith("<?xml") || /^<[a-zA-Z][\s\S]*>/.test(trimmed)) return "xml";
-    if (/^(query|mutation|subscription|fragment)\s/m.test(trimmed) || /\{\s*\w+\s*[({]/.test(trimmed)) return "graphql";
+    if (/^(query|mutation|subscription|fragment)\s/m.test(trimmed)) return "graphql";
     if (/^[a-zA-Z0-9_.~-]+=[^&]*(&[a-zA-Z0-9_.~-]+=[^&]*)*$/.test(trimmed)) return "form-data";
+    if (/^--[\w-]+\r?\n/.test(trimmed)) return "multipart";
   }
 
   return "text";
 }
 
 const FORMAT_LABELS: Record<BodyFormat, string> = {
-  json: "JSON",
-  html: "HTML",
-  xml: "XML",
-  javascript: "JavaScript",
-  graphql: "GraphQL",
-  "form-data": "Form Data",
-  text: "Plain Text",
+  json: "JSON", "graphql-json": "GraphQL", html: "HTML", xml: "XML",
+  javascript: "JavaScript", graphql: "GraphQL", "form-data": "Form Data",
+  multipart: "Multipart", text: "Plain Text",
 };
 
-const FORMAT_BADGE_CLASS: Record<BodyFormat, string> = {
-  json: "bg-amber-500/15 text-amber-400 border-amber-500/25",
-  html: "bg-orange-500/15 text-orange-400 border-orange-500/25",
-  xml: "bg-cyan-500/15 text-cyan-400 border-cyan-500/25",
-  javascript: "bg-yellow-500/15 text-yellow-400 border-yellow-500/25",
-  graphql: "bg-pink-500/15 text-pink-400 border-pink-500/25",
-  "form-data": "bg-violet-500/15 text-violet-400 border-violet-500/25",
-  text: "bg-muted text-muted-foreground border-border",
-};
+// ── Copy button ───────────────────────────────────────────────────────
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }, [text]);
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="flex items-center gap-1 px-2 py-1 rounded-sm text-[10px] font-mono text-[#908fa0] hover:text-[#c7c4d7] hover:bg-[#39393b] transition-colors"
+      title="Copy to clipboard"
+    >
+      {copied ? (
+        <>
+          <svg className="w-3 h-3 text-[#4fdbc8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          <span className="text-[#4fdbc8]">Copied</span>
+        </>
+      ) : (
+        <>
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+          Copy
+        </>
+      )}
+    </button>
+  );
+}
+
+// ── CodeBlock wrapper ─────────────────────────────────────────────────
+
+function CodeBlock({ children, rawText, label, size }: { children: React.ReactNode; rawText: string; label: string; size?: string }) {
+  return (
+    <div className="relative group">
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-2">
+          {label && <span className="text-[10px] font-mono text-[#908fa0]">{label}</span>}
+          {size && <span className="text-[10px] font-mono text-[#908fa0]/60">{size}</span>}
+        </div>
+        <CopyButton text={rawText} />
+      </div>
+      <pre className="font-mono text-sm text-[#c7c4d7] whitespace-pre overflow-auto rounded-sm bg-[#0e0e10] p-4">
+        {children}
+      </pre>
+    </div>
+  );
+}
+
+// ── HTML / XML syntax highlighter ─────────────────────────────────────
+
+function MarkupHighlighter({ text }: { text: string }) {
+  const tokens: React.ReactNode[] = [];
+  const re = /(<!--[\s\S]*?-->)|(<\/?\s*)([\w:.-]+)((?:\s+[\w:.-]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*))?)*)\s*(\/?>)|([^<]+)/g;
+  let match: RegExpExecArray | null;
+  let i = 0;
+
+  while ((match = re.exec(text)) !== null) {
+    if (match[1]) {
+      tokens.push(<span key={i++} className="text-[#908fa0]/60 italic">{match[1]}</span>);
+    } else if (match[2]) {
+      tokens.push(<span key={i++} className="text-[#908fa0]">{match[2]}</span>);
+      tokens.push(<span key={i++} className="text-[#ffb4ab]">{match[3]}</span>);
+      if (match[4]) {
+        const attrRe = /([\w:.-]+)(\s*=\s*)?("[^"]*"|'[^']*'|[^\s>]*)?/g;
+        let attrMatch: RegExpExecArray | null;
+        const attrStr = match[4];
+        while ((attrMatch = attrRe.exec(attrStr)) !== null) {
+          if (!attrMatch[0].trim()) continue;
+          tokens.push(<span key={i++} className="text-[#f59e0b]">{" "}{attrMatch[1]}</span>);
+          if (attrMatch[2]) {
+            tokens.push(<span key={i++} className="text-[#908fa0]">{attrMatch[2]}</span>);
+            if (attrMatch[3]) {
+              tokens.push(<span key={i++} className="text-[#4fdbc8]">{attrMatch[3]}</span>);
+            }
+          }
+        }
+      }
+      tokens.push(<span key={i++} className="text-[#908fa0]">{match[5]}</span>);
+    } else if (match[6]) {
+      tokens.push(<span key={i++}>{match[6]}</span>);
+    }
+  }
+
+  return <>{tokens}</>;
+}
+
+// ── JavaScript syntax highlighter ─────────────────────────────────────
+
+const JS_KEYWORDS = new Set([
+  "const", "let", "var", "function", "return", "if", "else", "for", "while",
+  "do", "switch", "case", "break", "continue", "new", "delete", "typeof",
+  "instanceof", "in", "of", "class", "extends", "import", "export", "from",
+  "default", "try", "catch", "finally", "throw", "async", "await", "yield",
+  "this", "super", "null", "undefined", "true", "false", "void", "with",
+]);
+
+function JsHighlighter({ text }: { text: string }) {
+  const tokens: React.ReactNode[] = [];
+  const re = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)|(\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b)|(\b[a-zA-Z_$][\w$]*\b)|(=>|[{}()[\];,.:?!&|<>=+\-*/%~^]+)/g;
+  let match: RegExpExecArray | null;
+  let i = 0;
+  let lastIndex = 0;
+
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      tokens.push(<span key={i++}>{text.slice(lastIndex, match.index)}</span>);
+    }
+    if (match[1]) tokens.push(<span key={i++} className="text-[#908fa0]/60 italic">{match[1]}</span>);
+    else if (match[2]) tokens.push(<span key={i++} className="text-[#4fdbc8]">{match[2]}</span>);
+    else if (match[3]) tokens.push(<span key={i++} className="text-[#4fdbc8]">{match[3]}</span>);
+    else if (match[4]) {
+      const cls = JS_KEYWORDS.has(match[4])
+        ? "text-[#c084fc] font-semibold"
+        : /^[A-Z]/.test(match[4]) ? "text-[#f59e0b]" : "text-[#60a5fa]";
+      tokens.push(<span key={i++} className={cls}>{match[4]}</span>);
+    } else if (match[5]) tokens.push(<span key={i++} className="text-[#908fa0]">{match[5]}</span>);
+    lastIndex = re.lastIndex;
+  }
+  if (lastIndex < text.length) tokens.push(<span key={i++}>{text.slice(lastIndex)}</span>);
+  return <>{tokens}</>;
+}
+
+// ── Form-data viewer ──────────────────────────────────────────────────
+
+function FormDataViewer({ text }: { text: string }) {
+  const params = text.split("&").map((pair) => {
+    const eqIdx = pair.indexOf("=");
+    if (eqIdx === -1) return { key: decodeURIComponent(pair), value: "" };
+    return {
+      key: decodeURIComponent(pair.slice(0, eqIdx)),
+      value: decodeURIComponent(pair.slice(eqIdx + 1)),
+    };
+  });
+
+  return (
+    <div className="space-y-0">
+      {params.map(({ key, value }, i) => (
+        <div key={i} className="flex gap-4 py-1.5">
+          <span className="font-mono text-sm text-[#c084fc] shrink-0">{key}</span>
+          <span className="font-mono text-sm text-[#4fdbc8] break-all">{value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Multipart form-data viewer ────────────────────────────────────────
+
+interface MultipartPart {
+  name: string;
+  filename?: string;
+  contentType?: string;
+  value: string;
+}
+
+function parseMultipart(text: string): MultipartPart[] {
+  const lines = text.split(/\r?\n/);
+  const boundary = lines[0]?.trim();
+  if (!boundary || !boundary.startsWith("--")) return [];
+
+  const parts: MultipartPart[] = [];
+  const rawParts = text.split(boundary).slice(1);
+
+  for (const raw of rawParts) {
+    if (raw.trim() === "--" || raw.trim() === "") continue;
+    const headerEnd = raw.indexOf("\r\n\r\n") !== -1
+      ? raw.indexOf("\r\n\r\n") : raw.indexOf("\n\n");
+    const sep = raw.indexOf("\r\n\r\n") !== -1 ? "\r\n\r\n" : "\n\n";
+    if (headerEnd === -1) continue;
+
+    const headerSection = raw.slice(0, headerEnd);
+    const body = raw.slice(headerEnd + sep.length).replace(/\r?\n$/, "");
+
+    parts.push({
+      name: headerSection.match(/name="([^"]+)"/)?.[1] ?? "(unknown)",
+      filename: headerSection.match(/filename="([^"]+)"/)?.[1],
+      contentType: headerSection.match(/Content-Type:\s*(.+)/i)?.[1]?.trim(),
+      value: body,
+    });
+  }
+  return parts;
+}
+
+function MultipartViewer({ text }: { text: string }) {
+  const parts = parseMultipart(text);
+
+  if (parts.length === 0) {
+    return (
+      <pre className="font-mono text-sm text-[#c7c4d7] whitespace-pre-wrap overflow-auto rounded-sm bg-[#0e0e10] p-3">
+        {text}
+      </pre>
+    );
+  }
+
+  return (
+    <div className="space-y-0">
+      {parts.map((part, i) => (
+        <div key={i} className="flex gap-4 py-1.5">
+          <div className="shrink-0">
+            <span className="font-mono text-sm text-[#c084fc]">{part.name}</span>
+            {part.filename && <span className="text-[#908fa0] text-xs ml-2">({part.filename})</span>}
+            {part.contentType && <span className="text-[#908fa0] text-xs block">{part.contentType}</span>}
+          </div>
+          <span className="font-mono text-sm text-[#4fdbc8] break-all">
+            {part.value || <span className="text-[#908fa0] italic">(binary)</span>}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // ── JSON viewer ────────────────────────────────────────────────────────
 
 function JsonValue({ value, indent = 0 }: { value: unknown; indent?: number }) {
   if (value === null || value === undefined)
-    return <span className="text-muted-foreground">null</span>;
+    return <span className="text-[#908fa0]">null</span>;
   if (typeof value === "boolean")
-    return <span className="text-amber-400">{String(value)}</span>;
+    return <span className="text-[#c084fc]">{String(value)}</span>;
   if (typeof value === "number")
-    return <span className="text-teal-400">{value}</span>;
+    return <span className="text-[#4fdbc8]">{value}</span>;
   if (typeof value === "string")
-    return <span className="text-emerald-400">&quot;{value}&quot;</span>;
+    return <span className="text-[#4fdbc8]">&quot;{value}&quot;</span>;
 
   if (Array.isArray(value)) {
     if (value.length === 0) return <span>{"[]"}</span>;
@@ -155,7 +364,7 @@ function JsonValue({ value, indent = 0 }: { value: unknown; indent?: number }) {
         {entries.map(([k, v], i) => (
           <span key={k}>
             {"  ".repeat(indent + 1)}
-            <span className="text-purple-400">&quot;{k}&quot;</span>
+            <span className="text-[#c7c4d7]">&quot;{k}&quot;</span>
             {": "}
             <JsonValue value={v} indent={indent + 1} />
             {i < entries.length - 1 ? "," : ""}
@@ -169,97 +378,6 @@ function JsonValue({ value, indent = 0 }: { value: unknown; indent?: number }) {
   }
 
   return <span>{String(value)}</span>;
-}
-
-// ── HTML / XML syntax highlighter ─────────────────────────────────────
-
-function MarkupHighlighter({ text }: { text: string }) {
-  // Tokenize markup into tags, attributes, strings, comments, and text
-  const tokens: React.ReactNode[] = [];
-  // Regex: comments, tags (with attrs), or text between
-  const re = /(<!--[\s\S]*?-->)|(<\/?\s*)([\w:.-]+)((?:\s+[\w:.-]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*))?)*)\s*(\/?>)|([^<]+)/g;
-  let match: RegExpExecArray | null;
-  let i = 0;
-
-  while ((match = re.exec(text)) !== null) {
-    if (match[1]) {
-      // Comment
-      tokens.push(<span key={i++} className="text-muted-foreground/60 italic">{match[1]}</span>);
-    } else if (match[2]) {
-      // Tag
-      tokens.push(<span key={i++} className="text-muted-foreground">{match[2]}</span>);
-      tokens.push(<span key={i++} className="text-red-400">{match[3]}</span>);
-      // Attributes
-      if (match[4]) {
-        const attrRe = /([\w:.-]+)(\s*=\s*)?("[^"]*"|'[^']*'|[^\s>]*)?/g;
-        let attrMatch: RegExpExecArray | null;
-        const attrStr = match[4];
-        while ((attrMatch = attrRe.exec(attrStr)) !== null) {
-          if (!attrMatch[0].trim()) continue;
-          tokens.push(<span key={i++} className="text-amber-400">{" "}{attrMatch[1]}</span>);
-          if (attrMatch[2]) {
-            tokens.push(<span key={i++} className="text-muted-foreground">{attrMatch[2]}</span>);
-            if (attrMatch[3]) {
-              tokens.push(<span key={i++} className="text-emerald-400">{attrMatch[3]}</span>);
-            }
-          }
-        }
-      }
-      tokens.push(<span key={i++} className="text-muted-foreground">{match[5]}</span>);
-    } else if (match[6]) {
-      // Text content
-      tokens.push(<span key={i++}>{match[6]}</span>);
-    }
-  }
-
-  return <>{tokens}</>;
-}
-
-// ── JavaScript syntax highlighter ─────────────────────────────────────
-
-const JS_KEYWORDS = new Set([
-  "const", "let", "var", "function", "return", "if", "else", "for", "while",
-  "do", "switch", "case", "break", "continue", "new", "delete", "typeof",
-  "instanceof", "in", "of", "class", "extends", "import", "export", "from",
-  "default", "try", "catch", "finally", "throw", "async", "await", "yield",
-  "this", "super", "null", "undefined", "true", "false", "void", "with",
-]);
-
-function JsHighlighter({ text }: { text: string }) {
-  const tokens: React.ReactNode[] = [];
-  // Match: comments, strings, regex, numbers, keywords/identifiers, operators/punctuation
-  const re = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)|(\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b)|(\b[a-zA-Z_$][\w$]*\b)|(=>|[{}()[\];,.:?!&|<>=+\-*/%~^]+)/g;
-  let match: RegExpExecArray | null;
-  let i = 0;
-  let lastIndex = 0;
-
-  while ((match = re.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      tokens.push(<span key={i++}>{text.slice(lastIndex, match.index)}</span>);
-    }
-    if (match[1]) {
-      tokens.push(<span key={i++} className="text-muted-foreground/60 italic">{match[1]}</span>);
-    } else if (match[2]) {
-      tokens.push(<span key={i++} className="text-emerald-400">{match[2]}</span>);
-    } else if (match[3]) {
-      tokens.push(<span key={i++} className="text-teal-400">{match[3]}</span>);
-    } else if (match[4]) {
-      const cls = JS_KEYWORDS.has(match[4])
-        ? "text-purple-400 font-semibold"
-        : /^[A-Z]/.test(match[4])
-          ? "text-amber-400"
-          : "text-blue-400";
-      tokens.push(<span key={i++} className={cls}>{match[4]}</span>);
-    } else if (match[5]) {
-      tokens.push(<span key={i++} className="text-muted-foreground">{match[5]}</span>);
-    }
-    lastIndex = re.lastIndex;
-  }
-  if (lastIndex < text.length) {
-    tokens.push(<span key={i++}>{text.slice(lastIndex)}</span>);
-  }
-
-  return <>{tokens}</>;
 }
 
 // ── GraphQL syntax highlighter ────────────────────────────────────────
@@ -281,316 +399,329 @@ function GraphqlHighlighter({ text }: { text: string }) {
     if (match.index > lastIndex) {
       tokens.push(<span key={i++}>{text.slice(lastIndex, match.index)}</span>);
     }
-    if (match[1]) {
-      tokens.push(<span key={i++} className="text-muted-foreground/60 italic">{match[1]}</span>);
-    } else if (match[2]) {
-      tokens.push(<span key={i++} className="text-emerald-400">{match[2]}</span>);
-    } else if (match[3]) {
-      tokens.push(<span key={i++} className="text-teal-400">{match[3]}</span>);
-    } else if (match[4]) {
-      tokens.push(<span key={i++} className="text-amber-400">{match[4]}</span>);
-    } else if (match[5]) {
-      tokens.push(<span key={i++} className="text-pink-400">{match[5]}</span>);
-    } else if (match[6]) {
-      const cls = GQL_KEYWORDS.has(match[6])
-        ? "text-purple-400 font-semibold"
-        : /^[A-Z]/.test(match[6])
-          ? "text-amber-400"
-          : "text-blue-400";
+    if (match[1]) tokens.push(<span key={i++} className="text-[#908fa0]/60 italic">{match[1]}</span>);
+    else if (match[2]) tokens.push(<span key={i++} className="text-[#4fdbc8]">{match[2]}</span>);
+    else if (match[3]) tokens.push(<span key={i++} className="text-[#4fdbc8]">{match[3]}</span>);
+    else if (match[4]) tokens.push(<span key={i++} className="text-[#f59e0b]">{match[4]}</span>);
+    else if (match[5]) tokens.push(<span key={i++} className="text-[#c084fc]">{match[5]}</span>);
+    else if (match[6]) {
+      const cls = GQL_KEYWORDS.has(match[6]) ? "text-[#c084fc] font-semibold"
+        : /^[A-Z]/.test(match[6]) ? "text-[#f59e0b]" : "text-[#60a5fa]";
       tokens.push(<span key={i++} className={cls}>{match[6]}</span>);
-    } else if (match[7]) {
-      tokens.push(<span key={i++} className="text-muted-foreground">{match[7]}</span>);
-    }
+    } else if (match[7]) tokens.push(<span key={i++} className="text-[#908fa0]">{match[7]}</span>);
     lastIndex = re.lastIndex;
   }
-  if (lastIndex < text.length) {
-    tokens.push(<span key={i++}>{text.slice(lastIndex)}</span>);
-  }
-
+  if (lastIndex < text.length) tokens.push(<span key={i++}>{text.slice(lastIndex)}</span>);
   return <>{tokens}</>;
 }
 
-// ── Form-data viewer ──────────────────────────────────────────────────
+// ── GraphQL-over-JSON viewer ──────────────────────────────────────────
 
-function FormDataViewer({ text }: { text: string }) {
-  const params = text.split("&").map((pair) => {
-    const eqIdx = pair.indexOf("=");
-    if (eqIdx === -1) return { key: decodeURIComponent(pair), value: "" };
-    return {
-      key: decodeURIComponent(pair.slice(0, eqIdx)),
-      value: decodeURIComponent(pair.slice(eqIdx + 1)),
-    };
-  });
+function GraphqlJsonViewer({ body }: { body: Record<string, unknown> }) {
+  const query = body.query as string;
+  const variables = body.variables as Record<string, unknown> | undefined;
+  const operationName = body.operationName as string | undefined;
 
   return (
-    <Table>
-      <TableBody>
-        {params.map(({ key, value }, i) => (
-          <TableRow key={i}>
-            <TableCell className="py-1.5 pr-4 font-mono text-purple-400 whitespace-nowrap align-top">
-              {key}
-            </TableCell>
-            <TableCell className="py-1.5 font-mono text-emerald-400 break-all whitespace-normal">
-              {value}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
-
-// ── HTML preview ──────────────────────────────────────────────────────
-
-function HtmlPreview({ html, baseUrl }: { html: string; baseUrl?: string }) {
-  const doc = useMemo(() => {
-    // Inject a <base> tag so relative URLs (stylesheets, images) resolve correctly
-    if (!baseUrl) return html;
-    try {
-      const origin = new URL(baseUrl).origin;
-      const baseTag = `<base href="${origin}/">`;
-      // Insert after <head> if present, otherwise prepend
-      if (/<head[\s>]/i.test(html)) {
-        return html.replace(/(<head[^>]*>)/i, `$1${baseTag}`);
-      }
-      return baseTag + html;
-    } catch {
-      return html;
-    }
-  }, [html, baseUrl]);
-
-  return (
-    <iframe
-      srcDoc={doc}
-      sandbox="allow-same-origin allow-scripts"
-      className="w-full rounded-md border border-border bg-white"
-      style={{ minHeight: 300 }}
-      title="HTML Preview"
-    />
+    <div className="space-y-3">
+      {operationName && (
+        <div>
+          <p className="text-[10px] font-semibold text-[#908fa0] uppercase tracking-[0.05em] mb-1">Operation</p>
+          <span className="font-mono text-sm text-[#c084fc]">{operationName}</span>
+        </div>
+      )}
+      <div>
+        <p className="text-[10px] font-semibold text-[#908fa0] uppercase tracking-[0.05em] mb-1">Query</p>
+        <pre className="font-mono text-sm text-[#c7c4d7] whitespace-pre overflow-auto rounded-sm bg-[#0e0e10] p-3">
+          <GraphqlHighlighter text={query} />
+        </pre>
+      </div>
+      {variables && Object.keys(variables).length > 0 && (
+        <div>
+          <p className="text-[10px] font-semibold text-[#908fa0] uppercase tracking-[0.05em] mb-1">Variables</p>
+          <pre className="font-mono text-sm text-[#c7c4d7] whitespace-pre overflow-auto rounded-sm bg-[#0e0e10] p-3">
+            <JsonValue value={variables} />
+          </pre>
+        </div>
+      )}
+    </div>
   );
 }
 
 // ── Body viewer ───────────────────────────────────────────────────────
 
-function BodyViewer({ body, contentType, baseUrl }: { body: unknown; contentType?: string; baseUrl?: string }) {
-  const [preview, setPreview] = useState(false);
+function getRawText(body: unknown): string {
+  if (body === null || body === undefined) return "";
+  if (typeof body === "string") return body;
+  return JSON.stringify(body, null, 2);
+}
 
+function tryParseJson(text: string): unknown | null {
+  try { return JSON.parse(text); } catch { return null; }
+}
+
+function BodyViewer({ body, contentType, title = "Body" }: { body: unknown; contentType?: string; title?: string }) {
   if (body === null || body === undefined)
-    return <p className="text-sm italic text-muted-foreground">No body</p>;
+    return <p className="text-sm italic text-[#908fa0]">No body</p>;
 
   const format = detectFormat(body, contentType);
   const label = FORMAT_LABELS[format];
-  const badgeCls = FORMAT_BADGE_CLASS[format];
-  const isHtml = format === "html";
+  const rawText = getRawText(body);
+  const sizeStr = formatBytes(rawText.length);
 
-  const toolbar = (
-    <div className="flex items-center gap-2">
-      <Badge className={`text-[10px] ${badgeCls}`}>{label}</Badge>
-      {isHtml && (
-        <Button
-          variant={preview ? "default" : "outline"}
-          size="sm"
-          className="h-5 text-[10px] px-2"
-          onClick={() => setPreview((p) => !p)}
-        >
-          {preview ? "Source" : "Preview"}
-        </Button>
-      )}
-    </div>
-  );
+  // GraphQL-over-JSON
+  if (format === "graphql-json") {
+    const obj = typeof body === "object" && body !== null
+      ? (body as Record<string, unknown>)
+      : tryParseJson(String(body)) as Record<string, unknown> | null;
+    if (obj) {
+      return (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-semibold text-[#908fa0] uppercase tracking-[0.05em]">{title}</span>
+            <CopyButton text={rawText} />
+          </div>
+          <GraphqlJsonViewer body={obj} />
+        </div>
+      );
+    }
+  }
 
-  // For JSON objects, render with JsonValue
+  // JSON (object already parsed)
   if (format === "json" && typeof body === "object") {
     return (
-      <div className="space-y-2">
-        {toolbar}
-        <pre className="font-mono text-sm text-foreground/80 whitespace-pre overflow-auto rounded-md bg-muted/50 p-3">
-          <JsonValue value={body} />
-        </pre>
-      </div>
+      <CodeBlock rawText={rawText} label={label} size={sizeStr}>
+        <JsonValue value={body} />
+      </CodeBlock>
     );
   }
 
-  // For JSON strings, try to parse and pretty-print
   const text = String(body);
 
+  // JSON (string that needs parsing)
   if (format === "json") {
-    try {
-      const parsed = JSON.parse(text);
+    const parsed = tryParseJson(text);
+    if (parsed !== null) {
+      const prettyJson = JSON.stringify(parsed, null, 2);
       return (
-        <div className="space-y-2">
-          {toolbar}
-          <pre className="font-mono text-sm text-foreground/80 whitespace-pre overflow-auto rounded-md bg-muted/50 p-3">
-            <JsonValue value={parsed} />
-          </pre>
-        </div>
+        <CodeBlock rawText={prettyJson} label={label} size={sizeStr}>
+          <JsonValue value={parsed} />
+        </CodeBlock>
       );
-    } catch { /* fall through to raw text */ }
+    }
   }
 
+  // Form data
   if (format === "form-data") {
     return (
-      <div className="space-y-2">
-        {toolbar}
-        <div className="rounded-md bg-muted/50 p-3">
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-[10px] font-mono text-[#908fa0]">{label}</span>
+          <CopyButton text={text} />
+        </div>
+        <div className="rounded-sm bg-[#0e0e10] p-4">
           <FormDataViewer text={text} />
         </div>
       </div>
     );
   }
 
-  // HTML preview mode
-  if (isHtml && preview) {
+  // Multipart
+  if (format === "multipart") {
     return (
-      <div className="space-y-2">
-        {toolbar}
-        <HtmlPreview html={text} baseUrl={baseUrl} />
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-[10px] font-mono text-[#908fa0]">{label}</span>
+          <CopyButton text={text} />
+        </div>
+        <div className="rounded-sm bg-[#0e0e10] p-4">
+          <MultipartViewer text={text} />
+        </div>
       </div>
     );
   }
 
-  const highlighter =
-    format === "html" || format === "xml" ? <MarkupHighlighter text={text} /> :
-    format === "javascript" ? <JsHighlighter text={text} /> :
-    format === "graphql" ? <GraphqlHighlighter text={text} /> :
-    text;
+  // HTML / XML with syntax highlighting
+  if (format === "html" || format === "xml") {
+    return (
+      <CodeBlock rawText={text} label={label} size={sizeStr}>
+        <MarkupHighlighter text={text} />
+      </CodeBlock>
+    );
+  }
 
+  // JavaScript
+  if (format === "javascript") {
+    return (
+      <CodeBlock rawText={text} label={label} size={sizeStr}>
+        <JsHighlighter text={text} />
+      </CodeBlock>
+    );
+  }
+
+  // GraphQL
+  if (format === "graphql") {
+    return (
+      <CodeBlock rawText={text} label={label} size={sizeStr}>
+        <GraphqlHighlighter text={text} />
+      </CodeBlock>
+    );
+  }
+
+  // Plain text fallback
   return (
-    <div className="space-y-2">
-      {toolbar}
-      <pre className="font-mono text-sm text-foreground/80 whitespace-pre overflow-auto rounded-md bg-muted/50 p-3">
-        {highlighter}
-      </pre>
+    <CodeBlock rawText={text} label={label} size={sizeStr}>
+      {text}
+    </CodeBlock>
+  );
+}
+
+// ── Headers table ─────────────────────────────────────────────────────
+
+function HeadersTable({ headers, title }: { headers: Record<string, string>; title: string }) {
+  const entries = Object.entries(headers);
+  if (entries.length === 0)
+    return <p className="text-sm italic text-[#908fa0]">No headers</p>;
+  return (
+    <div>
+      <h3 className="text-[10px] font-semibold text-[#908fa0] uppercase tracking-[0.05em] mb-3">{title}</h3>
+      <div className="space-y-0">
+        {entries.map(([k, v]) => (
+          <div key={k} className="flex justify-between py-1.5 gap-4">
+            <span className="font-mono text-sm text-[#c0c1ff] shrink-0">{k}</span>
+            <span className="font-mono text-sm text-[#c7c4d7] text-right truncate">{String(v)}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function HeadersTable({ headers }: { headers: Record<string, string> }) {
-  const entries = Object.entries(headers);
-  if (entries.length === 0)
-    return <p className="text-sm italic text-muted-foreground">No headers</p>;
+// ── Metadata grid ─────────────────────────────────────────────────────
+
+function MetadataGrid({ req }: { req: InspectorRequest }) {
+  const methodStyle = getMethodStyle(req.method);
+  const statusStyle = getStatusStyle(req.status);
+  const statusText = getStatusText(req.status);
+
   return (
-    <Table>
-      <TableBody>
-        {entries.map(([k, v]) => (
-          <TableRow key={k}>
-            <TableCell className="py-1.5 pr-4 font-mono text-muted-foreground whitespace-nowrap align-top">
-              {k}
-            </TableCell>
-            <TableCell className="py-1.5 font-mono text-foreground/80 break-all whitespace-normal">
-              {String(v)}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <div>
+      <h3 className="text-[10px] font-semibold text-[#908fa0] uppercase tracking-[0.05em] mb-3">Metadata</h3>
+      <div className="bg-[#201f22] rounded-sm overflow-hidden">
+        {/* Row 1: Method + Status */}
+        <div className="grid grid-cols-2">
+          <div className="px-4 py-3 flex items-center justify-between">
+            <span className="text-sm text-[#908fa0]">Method</span>
+            <span className={`font-mono text-sm font-bold ${methodStyle.text}`}>{req.method}</span>
+          </div>
+          <div className="px-4 py-3 flex items-center justify-between bg-[#1a1a1c]">
+            <span className="text-sm text-[#908fa0]">Status</span>
+            <span className={`font-mono text-sm font-bold ${statusStyle.text}`}>
+              {req.status} {statusText}
+            </span>
+          </div>
+        </div>
+        {/* Row 2: Duration + Time */}
+        <div className="grid grid-cols-2" style={{ borderTop: "1px solid rgba(70, 69, 84, 0.15)" }}>
+          <div className="px-4 py-3 flex items-center justify-between">
+            <span className="text-sm text-[#908fa0]">Duration</span>
+            <span className="font-mono text-sm text-[#c7c4d7]">{req.duration.toFixed(2)} ms</span>
+          </div>
+          <div className="px-4 py-3 flex items-center justify-between bg-[#1a1a1c]">
+            <span className="text-sm text-[#908fa0]">Time</span>
+            <span className="font-mono text-sm text-[#c7c4d7]">
+              {new Date(req.startedAt).toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit", fractionalSecondDigits: 3 })}
+            </span>
+          </div>
+        </div>
+        {/* Row 3: URL */}
+        <div style={{ borderTop: "1px solid rgba(70, 69, 84, 0.15)" }}>
+          <div className="px-4 py-3 flex items-center justify-between">
+            <span className="text-sm text-[#908fa0]">URL</span>
+            <span className="font-mono text-sm text-[#c7c4d7] text-right break-all ml-8">{req.url}</span>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
 // ── Detail panel ───────────────────────────────────────────────────────
 
 function DetailPanel({ req }: { req: InspectorRequest }) {
+  const [activeTab, setActiveTab] = useState<"overview" | "request" | "response">("overview");
+
+  const tabs = [
+    { id: "overview" as const, label: "OVERVIEW" },
+    { id: "request" as const, label: "REQUEST" },
+    { id: "response" as const, label: "RESPONSE" },
+  ];
+
   return (
-    <Tabs defaultValue="overview" className="flex flex-col h-full">
-      <TabsList variant="line" className="shrink-0 px-2 border-b border-border">
-        <TabsTrigger value="overview">Overview</TabsTrigger>
-        <TabsTrigger value="request">Request</TabsTrigger>
-        <TabsTrigger value="response">Response</TabsTrigger>
-      </TabsList>
+    <div className="flex flex-col h-full">
+      {/* Tab bar */}
+      <div className="flex items-center gap-0 bg-[#2a2a2c] shrink-0">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-6 py-3 text-xs font-semibold tracking-[0.05em] transition-colors relative ${
+              activeTab === tab.id
+                ? "text-[#e6e1e5] bg-[#353437]"
+                : "text-[#908fa0] hover:text-[#c7c4d7] hover:bg-[#39393b]"
+            }`}
+          >
+            {tab.label}
+            {activeTab === tab.id && (
+              <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#c0c1ff]" />
+            )}
+          </button>
+        ))}
+      </div>
 
-      <TabsContent value="overview" className="flex-1 overflow-y-auto p-4 space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <Card size="sm">
-            <CardContent>
-              <p className="text-xs text-muted-foreground mb-1">Method</p>
-              <Badge className={methodBadgeClass(req.method)}>{req.method}</Badge>
-            </CardContent>
-          </Card>
-          <Card size="sm">
-            <CardContent>
-              <p className="text-xs text-muted-foreground mb-1">Status</p>
-              <Badge className={statusBadgeClass(req.status)}>{req.status}</Badge>
-            </CardContent>
-          </Card>
-          <Card size="sm">
-            <CardContent>
-              <p className="text-xs text-muted-foreground mb-1">Duration</p>
-              <span className="font-mono text-sm">{req.duration}ms</span>
-            </CardContent>
-          </Card>
-          <Card size="sm">
-            <CardContent>
-              <p className="text-xs text-muted-foreground mb-1">Time</p>
-              <span className="font-mono text-sm">
-                {new Date(req.startedAt).toLocaleTimeString()}
-              </span>
-            </CardContent>
-          </Card>
-        </div>
+      {/* Tab content */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {activeTab === "overview" && (
+          <>
+            <MetadataGrid req={req} />
 
-        <Card size="sm">
-          <CardContent>
-            <p className="text-xs text-muted-foreground mb-1">URL</p>
-            <span className="font-mono text-sm break-all">{req.url}</span>
-          </CardContent>
-        </Card>
+            <div className="grid grid-cols-2 gap-8">
+              <HeadersTable headers={req.reqHeaders} title="Request Headers" />
+              <HeadersTable headers={req.resHeaders} title="Response Headers" />
+            </div>
 
-        {req.error && (
-          <Card size="sm" className="ring-destructive/30">
-            <CardContent>
-              <p className="text-xs text-destructive mb-1">Error</p>
-              <span className="font-mono text-sm text-destructive">{req.error}</span>
-            </CardContent>
-          </Card>
+            <BodyViewer
+              body={req.resBody}
+              contentType={req.resHeaders["content-type"] ?? req.resHeaders["Content-Type"]}
+            />
+          </>
         )}
 
-        <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            Request Headers
-          </h3>
-          <HeadersTable headers={req.reqHeaders} />
-        </div>
-        <Separator />
-        <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            Response Headers
-          </h3>
-          <HeadersTable headers={req.resHeaders} />
-        </div>
-      </TabsContent>
+        {activeTab === "request" && (
+          <>
+            <HeadersTable headers={req.reqHeaders} title="Request Headers" />
+            <div className="mt-6">
+              <BodyViewer
+                body={req.reqBody}
+                contentType={req.reqHeaders["content-type"] ?? req.reqHeaders["Content-Type"]}
+              />
+            </div>
+          </>
+        )}
 
-      <TabsContent value="request" className="flex-1 overflow-y-auto p-4 space-y-4">
-        <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            Headers
-          </h3>
-          <HeadersTable headers={req.reqHeaders} />
-        </div>
-        <Separator />
-        <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            Body
-          </h3>
-          <BodyViewer body={req.reqBody} contentType={req.reqHeaders["content-type"] ?? req.reqHeaders["Content-Type"]} baseUrl={req.url} />
-        </div>
-      </TabsContent>
-
-      <TabsContent value="response" className="flex-1 overflow-y-auto p-4 space-y-4">
-        <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            Headers
-          </h3>
-          <HeadersTable headers={req.resHeaders} />
-        </div>
-        <Separator />
-        <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            Body
-          </h3>
-          <BodyViewer body={req.resBody} contentType={req.resHeaders["content-type"] ?? req.resHeaders["Content-Type"]} baseUrl={req.url} />
-        </div>
-      </TabsContent>
-    </Tabs>
+        {activeTab === "response" && (
+          <>
+            <HeadersTable headers={req.resHeaders} title="Response Headers" />
+            <div className="mt-6">
+              <BodyViewer
+                body={req.resBody}
+                contentType={req.resHeaders["content-type"] ?? req.resHeaders["Content-Type"]}
+              />
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -600,174 +731,148 @@ export default function InspectorPage() {
   const { requests, connected, clear } = useInspectorFeed();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [methodFilter, setMethodFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [methodFilter, setMethodFilter] = useState<MethodFilter>("All");
 
   const filtered = useMemo(() => {
     return requests.filter((r) => {
-      if (methodFilter !== "all" && r.method !== methodFilter) return false;
-      if (!statusFilterMatch(r.status, statusFilter)) return false;
+      if (methodFilter !== "All" && r.method !== methodFilter) return false;
       if (search) {
         const q = search.toLowerCase();
-        if (
-          !r.method.toLowerCase().includes(q) &&
-          !r.url.toLowerCase().includes(q)
-        )
-          return false;
+        if (!r.method.toLowerCase().includes(q) && !r.url.toLowerCase().includes(q)) return false;
       }
       return true;
     });
-  }, [requests, methodFilter, statusFilter, search]);
+  }, [requests, methodFilter, search]);
 
   const selected = useMemo(
     () => requests.find((r) => r.id === selectedId) ?? null,
     [requests, selectedId]
   );
 
+  const methodFilters: MethodFilter[] = ["All", "GET", "POST", "PUT", "DELETE"];
+
   return (
-    <div className="h-screen flex flex-col bg-background text-foreground">
+    <div className="h-screen flex flex-col bg-[#131315] text-[#e6e1e5]">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-2.5 border-b border-border shrink-0">
+      <header className="flex items-center justify-between px-5 py-3 bg-[#131315] shrink-0">
         <div className="flex items-center gap-3">
-          <h1 className="text-sm font-semibold tracking-tight">
+          <h1 className="text-sm font-mono font-semibold tracking-tight text-[#e6e1e5]">
             Tunnel Inspector
           </h1>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <span className="inline-flex items-center gap-1.5 text-xs cursor-default">
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      connected ? "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]" : "bg-red-500"
-                    }`}
-                  />
-                  <span className={connected ? "text-emerald-400" : "text-red-400"}>
-                    {connected ? "Connected" : "Disconnected"}
-                  </span>
-                </span>
-              }
-            />
-            <TooltipContent>
-              {connected ? "SSE feed is active" : "Reconnecting to SSE feed..."}
-            </TooltipContent>
-          </Tooltip>
+          {!connected && (
+            <span className="inline-flex items-center gap-1.5 text-[10px]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffb4ab]" />
+              <span className="text-[#ffb4ab]">Disconnected</span>
+            </span>
+          )}
         </div>
-        <Badge variant="secondary" className="font-mono text-xs">
-          {filtered.length} request{filtered.length !== 1 ? "s" : ""}
-        </Badge>
+        <button
+          onClick={() => { clear(); setSelectedId(null); }}
+          className="text-[11px] font-semibold tracking-[0.08em] text-[#908fa0] hover:text-[#c7c4d7] transition-colors uppercase"
+        >
+          Clear Logs
+        </button>
       </header>
 
       <div className="flex flex-1 min-h-0">
-        {/* Left panel */}
-        <div className="w-100 shrink-0 flex flex-col border-r border-border">
-          {/* Toolbar */}
-          <Card className="rounded-none border-x-0 border-t-0 shrink-0 ring-0 shadow-none">
-            <CardContent className="p-2.5 space-y-2">
-              <Input
+        {/* Left panel - Request list */}
+        <div className="w-[380px] shrink-0 flex flex-col bg-[#131315]" style={{ borderRight: "1px solid rgba(70, 69, 84, 0.15)" }}>
+          {/* Search */}
+          <div className="px-3 py-2.5 shrink-0">
+            <div className="relative">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#908fa0]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
                 type="text"
-                placeholder="Search requests..."
+                placeholder="Filter requests..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                className="w-full bg-[#201f22] text-sm text-[#c7c4d7] placeholder-[#908fa0]/60 pl-9 pr-3 py-2 rounded-sm focus:outline-none focus:ring-1 focus:ring-[#c0c1ff]/30"
               />
-              <div className="flex gap-2">
-                <Select value={methodFilter} onValueChange={(v) => v && setMethodFilter(v)}>
-                  <SelectTrigger size="sm" className="flex-1">
-                    <SelectValue placeholder="Method" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Methods</SelectItem>
-                    <SelectItem value="GET">GET</SelectItem>
-                    <SelectItem value="POST">POST</SelectItem>
-                    <SelectItem value="PUT">PUT</SelectItem>
-                    <SelectItem value="PATCH">PATCH</SelectItem>
-                    <SelectItem value="DELETE">DELETE</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={statusFilter} onValueChange={(v) => v && setStatusFilter(v)}>
-                  <SelectTrigger size="sm" className="flex-1">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="2xx">2xx Success</SelectItem>
-                    <SelectItem value="4xx">4xx Client Error</SelectItem>
-                    <SelectItem value="5xx">5xx Server Error</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    clear();
-                    setSelectedId(null);
-                  }}
-                >
-                  Clear
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
+
+          {/* Method filter chips */}
+          <div className="flex items-center gap-1 px-3 pb-2 shrink-0">
+            {methodFilters.map((m) => (
+              <button
+                key={m}
+                onClick={() => setMethodFilter(m)}
+                className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm transition-colors ${
+                  methodFilter === m
+                    ? "bg-[#2a2a2c] text-[#e6e1e5]"
+                    : "text-[#908fa0] hover:text-[#c7c4d7] hover:bg-[#201f22]"
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
 
           {/* Request list */}
-          <ScrollArea className="flex-1">
+          <div className="flex-1 overflow-y-auto">
             {filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full min-h-75 text-center px-6">
-                <Card size="sm" className="border-dashed bg-transparent shadow-none ring-0">
-                  <CardContent className="flex flex-col items-center py-6 px-8">
-                    <div className="text-muted-foreground/30 text-4xl mb-3 font-mono">~</div>
-                    <p className="text-sm text-muted-foreground">No requests captured</p>
-                    <p className="text-xs text-muted-foreground/60 mt-1">
-                      Send traffic through the proxy on :8080 to see it here
-                    </p>
-                  </CardContent>
-                </Card>
+              <div className="flex flex-col items-center justify-center h-full text-center px-6">
+                <div className="text-[#908fa0]/20 text-4xl mb-3 font-mono">~</div>
+                <p className="text-sm text-[#908fa0]">No requests captured</p>
+                <p className="text-[11px] text-[#908fa0]/50 mt-1">
+                  Send traffic through the proxy to see it here
+                </p>
               </div>
             ) : (
-              filtered.map((r) => (
-                <Button
-                  key={r.id}
-                  variant="ghost"
-                  onClick={() => setSelectedId(r.id)}
-                  className={`w-full justify-start h-auto px-3 py-2.5 rounded-none border-b border-border/50 gap-2.5 animate-fade-in ${
-                    selectedId === r.id
-                      ? "bg-accent text-accent-foreground"
-                      : ""
-                  }`}
-                >
-                  <Badge className={`shrink-0 text-[10px] font-bold uppercase ${methodBadgeClass(r.method)}`}>
-                    {r.method}
-                  </Badge>
-                  <span className="flex-1 font-mono text-xs text-foreground/80 truncate text-left">
-                    {r.url}
-                  </span>
-                  <Badge className={`shrink-0 text-[10px] font-semibold ${statusBadgeClass(r.status)}`}>
-                    {r.status}
-                  </Badge>
-                  <span className="shrink-0 text-[10px] text-muted-foreground w-12 text-right font-mono">
-                    {r.duration}ms
-                  </span>
-                </Button>
-              ))
+              filtered.map((r) => {
+                const methodStyle = getMethodStyle(r.method);
+                const statusStyle = getStatusStyle(r.status);
+                const isSelected = selectedId === r.id;
+
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => setSelectedId(r.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors animate-fade-in ${
+                      isSelected
+                        ? "bg-[#201f22]"
+                        : "hover:bg-[#39393b]"
+                    }`}
+                    style={isSelected ? { borderLeft: "2px solid #c0c1ff" } : { borderLeft: "2px solid transparent" }}
+                  >
+                    {/* Method badge - ghost border style */}
+                    <span className={`shrink-0 text-[10px] font-bold uppercase tracking-wider font-mono border rounded-sm px-1.5 py-0.5 ${methodStyle.text} ${methodStyle.border}`}>
+                      {methodStyle.label}
+                    </span>
+
+                    {/* URL path */}
+                    <span className="flex-1 font-mono text-xs text-[#c7c4d7] truncate">
+                      {(() => {
+                        try { return new URL(r.url).pathname; } catch { return r.url; }
+                      })()}
+                    </span>
+
+                    {/* Status */}
+                    <span className={`shrink-0 text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-sm ${statusStyle.text} bg-current/10`}>
+                      {r.status}
+                    </span>
+
+                    {/* Duration */}
+                    <span className="shrink-0 text-[10px] text-[#908fa0] font-mono w-10 text-right">
+                      {r.duration}ms
+                    </span>
+                  </button>
+                );
+              })
             )}
-          </ScrollArea>
+          </div>
         </div>
 
-        {/* Right panel */}
-        <div className="flex-1 min-w-0">
+        {/* Right panel - Detail */}
+        <div className="flex-1 min-w-0 bg-[#201f22]">
           {selected ? (
             <DetailPanel req={selected} />
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center">
-              <Card size="sm" className="border-dashed bg-transparent shadow-none">
-                <CardContent className="flex flex-col items-center py-8 px-12">
-                  <div className="text-muted-foreground/20 text-5xl mb-3 font-mono">
-                    {"{ }"}
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Select a request to inspect
-                  </p>
-                </CardContent>
-              </Card>
+              <div className="text-[#908fa0]/15 text-6xl mb-4 font-mono">{"{ }"}</div>
+              <p className="text-sm text-[#908fa0]">Select a request to inspect</p>
             </div>
           )}
         </div>
