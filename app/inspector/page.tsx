@@ -170,26 +170,26 @@ function MarkupHighlighter({ text }: { text: string }) {
 
   while ((match = re.exec(text)) !== null) {
     if (match[1]) {
-      tokens.push(<span key={i++} className="text-[#908fa0]/60 italic">{match[1]}</span>);
+      tokens.push(<span key={i++} style={{ color: "#6a6a7a", fontStyle: "italic" }}>{match[1]}</span>);
     } else if (match[2]) {
-      tokens.push(<span key={i++} className="text-[#908fa0]">{match[2]}</span>);
-      tokens.push(<span key={i++} className="text-[#ffb4ab]">{match[3]}</span>);
+      tokens.push(<span key={i++} style={{ color: "#808080" }}>{match[2]}</span>);
+      tokens.push(<span key={i++} style={{ color: "#569cd6" }}>{match[3]}</span>);
       if (match[4]) {
         const attrRe = /([\w:.-]+)(\s*=\s*)?("[^"]*"|'[^']*'|[^\s>]*)?/g;
         let attrMatch: RegExpExecArray | null;
         const attrStr = match[4];
         while ((attrMatch = attrRe.exec(attrStr)) !== null) {
           if (!attrMatch[0].trim()) continue;
-          tokens.push(<span key={i++} className="text-[#f59e0b]">{" "}{attrMatch[1]}</span>);
+          tokens.push(<span key={i++} style={{ color: "#9cdcfe" }}>{" "}{attrMatch[1]}</span>);
           if (attrMatch[2]) {
-            tokens.push(<span key={i++} className="text-[#908fa0]">{attrMatch[2]}</span>);
+            tokens.push(<span key={i++} style={{ color: "#e6e1e5" }}>{attrMatch[2]}</span>);
             if (attrMatch[3]) {
-              tokens.push(<span key={i++} className="text-[#4fdbc8]">{attrMatch[3]}</span>);
+              tokens.push(<span key={i++} style={{ color: "#ce9178" }}>{attrMatch[3]}</span>);
             }
           }
         }
       }
-      tokens.push(<span key={i++} className="text-[#908fa0]">{match[5]}</span>);
+      tokens.push(<span key={i++} style={{ color: "#808080" }}>{match[5]}</span>);
     } else if (match[6]) {
       tokens.push(<span key={i++}>{match[6]}</span>);
     }
@@ -219,15 +219,15 @@ function JsHighlighter({ text }: { text: string }) {
     if (match.index > lastIndex) {
       tokens.push(<span key={i++}>{text.slice(lastIndex, match.index)}</span>);
     }
-    if (match[1]) tokens.push(<span key={i++} className="text-[#908fa0]/60 italic">{match[1]}</span>);
-    else if (match[2]) tokens.push(<span key={i++} className="text-[#4fdbc8]">{match[2]}</span>);
-    else if (match[3]) tokens.push(<span key={i++} className="text-[#4fdbc8]">{match[3]}</span>);
+    if (match[1]) tokens.push(<span key={i++} style={{ color: "#6a6a7a", fontStyle: "italic" }}>{match[1]}</span>);
+    else if (match[2]) tokens.push(<span key={i++} style={{ color: "#ce9178" }}>{match[2]}</span>);
+    else if (match[3]) tokens.push(<span key={i++} style={{ color: "#b5cea8" }}>{match[3]}</span>);
     else if (match[4]) {
-      const cls = JS_KEYWORDS.has(match[4])
-        ? "text-[#c084fc] font-semibold"
-        : /^[A-Z]/.test(match[4]) ? "text-[#f59e0b]" : "text-[#60a5fa]";
-      tokens.push(<span key={i++} className={cls}>{match[4]}</span>);
-    } else if (match[5]) tokens.push(<span key={i++} className="text-[#908fa0]">{match[5]}</span>);
+      const color = JS_KEYWORDS.has(match[4]) ? "#c586c0"
+        : /^[A-Z]/.test(match[4]) ? "#4ec9b0" : "#9cdcfe";
+      const fontWeight = JS_KEYWORDS.has(match[4]) ? "600" : undefined;
+      tokens.push(<span key={i++} style={{ color, fontWeight }}>{match[4]}</span>);
+    } else if (match[5]) tokens.push(<span key={i++} style={{ color: "#d4d4d4" }}>{match[5]}</span>);
     lastIndex = re.lastIndex;
   }
   if (lastIndex < text.length) tokens.push(<span key={i++}>{text.slice(lastIndex)}</span>);
@@ -328,51 +328,51 @@ function MultipartViewer({ text }: { text: string }) {
 
 function JsonValue({ value, indent = 0 }: { value: unknown; indent?: number }) {
   if (value === null || value === undefined)
-    return <span className="text-[#908fa0]">null</span>;
+    return <span style={{ color: "#908fa0" }}>null</span>;
   if (typeof value === "boolean")
-    return <span className="text-[#c084fc]">{String(value)}</span>;
+    return <span style={{ color: "#c084fc" }}>{String(value)}</span>;
   if (typeof value === "number")
-    return <span className="text-[#4fdbc8]">{value}</span>;
+    return <span style={{ color: "#b5cea8" }}>{value}</span>;
   if (typeof value === "string")
-    return <span className="text-[#4fdbc8]">&quot;{value}&quot;</span>;
+    return <span style={{ color: "#ce9178" }}>&quot;{value}&quot;</span>;
 
   if (Array.isArray(value)) {
-    if (value.length === 0) return <span>{"[]"}</span>;
+    if (value.length === 0) return <span style={{ color: "#e6e1e5" }}>{"[]"}</span>;
     return (
       <span>
-        {"[\n"}
+        <span style={{ color: "#e6e1e5" }}>{"["}</span>{"\n"}
         {value.map((item, i) => (
           <span key={i}>
             {"  ".repeat(indent + 1)}
             <JsonValue value={item} indent={indent + 1} />
-            {i < value.length - 1 ? "," : ""}
+            {i < value.length - 1 ? <span style={{ color: "#e6e1e5" }}>,</span> : null}
             {"\n"}
           </span>
         ))}
         {"  ".repeat(indent)}
-        {"]"}
+        <span style={{ color: "#e6e1e5" }}>{"]"}</span>
       </span>
     );
   }
 
   if (typeof value === "object") {
     const entries = Object.entries(value as Record<string, unknown>);
-    if (entries.length === 0) return <span>{"{}"}</span>;
+    if (entries.length === 0) return <span style={{ color: "#e6e1e5" }}>{"{}"}</span>;
     return (
       <span>
-        {"{\n"}
+        <span style={{ color: "#e6e1e5" }}>{"{"}</span>{"\n"}
         {entries.map(([k, v], i) => (
           <span key={k}>
             {"  ".repeat(indent + 1)}
-            <span className="text-[#c7c4d7]">&quot;{k}&quot;</span>
-            {": "}
+            <span style={{ color: "#9cdcfe" }}>&quot;{k}&quot;</span>
+            <span style={{ color: "#e6e1e5" }}>{": "}</span>
             <JsonValue value={v} indent={indent + 1} />
-            {i < entries.length - 1 ? "," : ""}
+            {i < entries.length - 1 ? <span style={{ color: "#e6e1e5" }}>,</span> : null}
             {"\n"}
           </span>
         ))}
         {"  ".repeat(indent)}
-        {"}"}
+        <span style={{ color: "#e6e1e5" }}>{"}"}</span>
       </span>
     );
   }
@@ -399,16 +399,17 @@ function GraphqlHighlighter({ text }: { text: string }) {
     if (match.index > lastIndex) {
       tokens.push(<span key={i++}>{text.slice(lastIndex, match.index)}</span>);
     }
-    if (match[1]) tokens.push(<span key={i++} className="text-[#908fa0]/60 italic">{match[1]}</span>);
-    else if (match[2]) tokens.push(<span key={i++} className="text-[#4fdbc8]">{match[2]}</span>);
-    else if (match[3]) tokens.push(<span key={i++} className="text-[#4fdbc8]">{match[3]}</span>);
-    else if (match[4]) tokens.push(<span key={i++} className="text-[#f59e0b]">{match[4]}</span>);
-    else if (match[5]) tokens.push(<span key={i++} className="text-[#c084fc]">{match[5]}</span>);
+    if (match[1]) tokens.push(<span key={i++} style={{ color: "#6a6a7a", fontStyle: "italic" }}>{match[1]}</span>);
+    else if (match[2]) tokens.push(<span key={i++} style={{ color: "#ce9178" }}>{match[2]}</span>);
+    else if (match[3]) tokens.push(<span key={i++} style={{ color: "#b5cea8" }}>{match[3]}</span>);
+    else if (match[4]) tokens.push(<span key={i++} style={{ color: "#f59e0b" }}>{match[4]}</span>);
+    else if (match[5]) tokens.push(<span key={i++} style={{ color: "#c084fc" }}>{match[5]}</span>);
     else if (match[6]) {
-      const cls = GQL_KEYWORDS.has(match[6]) ? "text-[#c084fc] font-semibold"
-        : /^[A-Z]/.test(match[6]) ? "text-[#f59e0b]" : "text-[#60a5fa]";
-      tokens.push(<span key={i++} className={cls}>{match[6]}</span>);
-    } else if (match[7]) tokens.push(<span key={i++} className="text-[#908fa0]">{match[7]}</span>);
+      const color = GQL_KEYWORDS.has(match[6]) ? "#c084fc"
+        : /^[A-Z]/.test(match[6]) ? "#f59e0b" : "#9cdcfe";
+      const fontWeight = GQL_KEYWORDS.has(match[6]) ? "600" : undefined;
+      tokens.push(<span key={i++} style={{ color, fontWeight }}>{match[6]}</span>);
+    } else if (match[7]) tokens.push(<span key={i++} style={{ color: "#908fa0" }}>{match[7]}</span>);
     lastIndex = re.lastIndex;
   }
   if (lastIndex < text.length) tokens.push(<span key={i++}>{text.slice(lastIndex)}</span>);
