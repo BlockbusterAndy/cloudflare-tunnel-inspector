@@ -16,6 +16,24 @@ Internet → cloudflared → Proxy (:8080) → Your App (:3000)
                       Inspector UI (:3000/inspector)
 ```
 
+### Traffic flow
+ 
+<p align="center">
+<img src="./docs/traffic-flow.svg" alt="Traffic flow diagram" />
+</p>
+ 
+### Request capture lifecycle
+ 
+<p align="center">
+<img src="./docs/request-lifecycle.svg" alt="Request lifecycle diagram" />
+</p>
+ 
+### Project structure
+ 
+<p align="center">
+<img src="./docs/project-structure.svg" alt="Project structure diagram" />
+</p>
+
 The proxy intercepts HTTP traffic on port **8080**, forwards it to your app on port **3000**, and broadcasts each request/response pair via Server-Sent Events on port **4040**. The Next.js inspector UI connects to the SSE stream and renders everything in real time.
 
 ## Quick Start
