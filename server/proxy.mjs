@@ -2,7 +2,7 @@ import http from "node:http";
 
 const PROXY_PORT = 8080;
 const SSE_PORT = 4040;
-const TARGET_PORT = 3001;
+const TARGET_PORT = 3000;
 const MAX_ENTRIES = 200;
 
 /** @type {Array<object>} */

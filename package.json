@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3001",
     "build": "next build",
-    "start": "next start",
+    "start": "next dev -p 3001",
     "lint": "eslint",
     "inspector": "node server/proxy.mjs",
     "dev:inspect": "concurrently \"npm run dev\" \"npm run inspector\""
