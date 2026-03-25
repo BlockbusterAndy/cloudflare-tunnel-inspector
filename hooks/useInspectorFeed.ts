@@ -16,7 +16,9 @@ export interface InspectorRequest {
   error?: string;
 }
 
-const SSE_URL = "http://localhost:4040/events";
+const BASE_URL = "http://localhost:4040";
+const SSE_URL = `${BASE_URL}/events`;
+const CLEAR_URL = `${BASE_URL}/api/clear`;
 const RECONNECT_DELAY = 3000;
 
 export function useInspectorFeed() {
@@ -54,7 +56,10 @@ export function useInspectorFeed() {
     };
   }, [connect]);
 
-  const clear = useCallback(() => setRequests([]), []);
+  const clear = useCallback(() => {
+    setRequests([]);
+    fetch(CLEAR_URL, { method: "DELETE" }).catch(() => {});
+  }, []);
 
   return { requests, connected, clear };
 }

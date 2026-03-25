@@ -116,7 +116,7 @@ const proxyServer = http.createServer((req, res) => {
 const sseServer = http.createServer((req, res) => {
   // CORS headers for the Next.js frontend
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") {
@@ -143,6 +143,14 @@ const sseServer = http.createServer((req, res) => {
   if (req.url === "/api/requests") {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify(buffer));
+    return;
+  }
+
+  if (req.url === "/api/clear" && req.method === "DELETE") {
+    buffer.length = 0;
+    broadcast("history", []);
+    res.writeHead(204);
+    res.end();
     return;
   }
 
