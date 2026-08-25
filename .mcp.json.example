@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "tunnel-inspector": {
+      "command": "node",
+      "args": ["server/mcp.mjs"],
+      "env": {
+        "INSPECTOR_URL": "http://127.0.0.1:4040"
+      }
+    }
+  }
+}
