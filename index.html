@@ -1095,7 +1095,7 @@
         <div class="hero-meta">
           <span class="hero-meta-item">MIT License</span>
           <span class="hero-meta-dot"></span>
-          <span class="hero-meta-item">Zero dependencies</span>
+          <span class="hero-meta-item">Zero-dependency proxy</span>
           <span class="hero-meta-dot"></span>
           <span class="hero-meta-item">100% local</span>
         </div>
@@ -1227,6 +1227,8 @@
       <h2>A thin proxy.<br>Full <span>visibility</span>.</h2>
       <p class="section-sub">
         One line change in your cloudflared config. The proxy sits invisibly in between, capturing everything without touching your app.
+        Responses stream straight through, so SSE endpoints and large downloads behave exactly as they would without it.
+        Every port here is configurable with a flag or an environment variable.
       </p>
     </div>
     <div class="arch-flow fade-up">
@@ -1289,32 +1291,32 @@
       <div class="feature-card">
         <div class="feature-icon fi-teal">⚡</div>
         <h3>Real-time live feed</h3>
-        <p>Requests stream into the dashboard via SSE the instant they hit your tunnel. No polling, no page refreshes, no delay.</p>
+        <p>Requests stream into the dashboard via SSE the instant they hit your tunnel. No polling, no page refreshes, no delay — and the proxy never holds a response back to inspect it.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon fi-indigo">🔍</div>
         <h3>Full request inspection</h3>
-        <p>Every header, every body, every status code. Inspect the full request and response cycle for each captured entry.</p>
+        <p>Every header, every body, every status code — plus duration, time to first byte, and transferred size. Replay any captured request from the UI, or copy it as a runnable cURL command.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon fi-amber">✨</div>
         <h3>Smart body highlighting</h3>
-        <p>JSON, GraphQL, HTML, XML, JavaScript, form data, multipart — auto-detected and syntax highlighted. Copy to clipboard with one click.</p>
+        <p>JSON, GraphQL, HTML, XML, JavaScript, form data, multipart — auto-detected and syntax highlighted. Gzip and brotli are decoded for you; binary and oversized bodies are labelled, never dumped as mojibake.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon fi-purple">🔎</div>
         <h3>Search and filter</h3>
-        <p>Filter by method (GET, POST, PUT, DELETE, PATCH) or search across URL paths in real time. Find the request you need instantly.</p>
+        <p>Filter by method (GET, POST, PUT, PATCH, DELETE) or status class (2xx, 3xx, 4xx, 5xx), and search across paths and status codes in real time. Your filters survive a reload.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon fi-teal">🛡️</div>
-        <h3>100% local</h3>
-        <p>The proxy and dashboard run entirely on your machine. Your traffic data never leaves localhost. No accounts, no cloud, no telemetry.</p>
+        <h3>100% local, redactable</h3>
+        <p>Both servers bind to loopback and the API refuses non-local origins, so captured traffic never reaches your network. Add <code style="font-family:var(--font-mono);font-size:12px">--redact</code> to mask auth headers and cookies before they ever enter the feed — safe to screen-share.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon fi-indigo">⚙️</div>
-        <h3>Zero-dependency proxy</h3>
-        <p>The proxy server is a single .mjs file using only Node.js built-ins. Nothing to install, nothing to update, nothing to break.</p>
+        <h3>Built for agents too</h3>
+        <p>A built-in MCP server hands your captured traffic to Claude Code, Cursor, or any MCP client — list, inspect, summarise, and replay requests without pasting a thing. The proxy itself stays Node.js built-ins only.</p>
       </div>
     </div>
   </div>
@@ -1365,7 +1367,7 @@
           <div class="code-block" id="code3">
             <button class="copy-btn" onclick="copyCode('code3')">Copy</button>
             <div><span class="prompt">$ </span><span class="cmd">npm run</span> <span class="arg">dev:inspect</span></div>
-            <div style="margin-top:8px"><span class="comment"># Open http://localhost:3000/inspector</span></div>
+            <div style="margin-top:8px"><span class="comment"># Open http://localhost:3001/inspector</span></div>
           </div>
         </div>
       </div>
@@ -1385,11 +1387,11 @@
         </p>
         <div class="wishlist">
           <div class="wishlist-item">
-            <span>WebSocket inspection support</span>
+            <span>WebSocket <em>frame</em> inspection — upgrades are proxied and logged, frames aren't decoded yet</span>
             <span class="wishlist-tag" style="margin-left:auto">help wanted</span>
           </div>
           <div class="wishlist-item">
-            <span>Request replay from the UI</span>
+            <span>Edit headers and body before replaying</span>
             <span class="wishlist-tag" style="margin-left:auto">help wanted</span>
           </div>
           <div class="wishlist-item">
@@ -1401,7 +1403,7 @@
             <span class="wishlist-tag" style="margin-left:auto">good first issue</span>
           </div>
           <div class="wishlist-item">
-            <span>Status code filter (2xx / 4xx / 5xx)</span>
+            <span>Persist captures across proxy restarts</span>
             <span class="wishlist-tag" style="margin-left:auto">good first issue</span>
           </div>
         </div>
@@ -1429,7 +1431,7 @@
               <div class="contribute-card-desc">Browse good first issues and open a PR.</div>
             </div>
           </a>
-          <a class="contribute-card" href="https://github.com/BlockbusterAndy/cloudflare-tunnel-inspector/blob/main/CONTRIBUTING.md" target="_blank">
+          <a class="contribute-card" href="https://github.com/BlockbusterAndy/cloudflare-tunnel-inspector/blob/HEAD/CONTRIBUTING.md" target="_blank">
             <div class="contribute-card-icon">📖</div>
             <div>
               <div class="contribute-card-title">Read the contributing guide</div>
@@ -1444,12 +1446,12 @@
 
 <!-- Footer -->
 <footer>
-  <div class="footer-logo">tunnel inspector · MIT</div>
+  <div class="footer-logo">tunnel inspector · v0.1.0 · MIT</div> <!-- x-release-please-version -->
   <div class="footer-links">
     <a class="footer-link" href="https://github.com/BlockbusterAndy/cloudflare-tunnel-inspector" target="_blank">GitHub</a>
-    <a class="footer-link" href="https://github.com/BlockbusterAndy/cloudflare-tunnel-inspector/blob/main/CONTRIBUTING.md" target="_blank">Contributing</a>
+    <a class="footer-link" href="https://github.com/BlockbusterAndy/cloudflare-tunnel-inspector/blob/HEAD/CONTRIBUTING.md" target="_blank">Contributing</a>
     <a class="footer-link" href="https://github.com/BlockbusterAndy/cloudflare-tunnel-inspector/issues" target="_blank">Issues</a>
-    <a class="footer-link" href="https://github.com/BlockbusterAndy/cloudflare-tunnel-inspector/blob/main/LICENSE" target="_blank">License</a>
+    <a class="footer-link" href="https://github.com/BlockbusterAndy/cloudflare-tunnel-inspector/blob/HEAD/LICENSE.md" target="_blank">License</a>
   </div>
   <div class="footer-right">Built by <a href="https://github.com/BlockbusterAndy" target="_blank" style="color:var(--indigo);text-decoration:none">@BlockbusterAndy</a></div>
 </footer>

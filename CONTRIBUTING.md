@@ -29,7 +29,7 @@ npm install
 npm run dev:inspect
 ```
 
-Open [http://localhost:3000/inspector](http://localhost:3000/inspector) — you should see the inspector dashboard.
+Open [http://localhost:3001/inspector](http://localhost:3001/inspector) — you should see the inspector dashboard.
 
 To send test traffic through the proxy:
 ```bash
@@ -39,16 +39,47 @@ curl http://localhost:8080/any/path
 ## Project structure
 
 ```
-├── server/proxy.mjs          # Standalone Node.js proxy (zero deps)
+├── server/
+│   ├── proxy.mjs             # Standalone Node.js proxy (zero deps)
+│   ├── config.mjs            # CLI flag / env resolution
+│   └── capture.mjs           # Body capture, decoding, redaction
 ├── app/
 │   ├── page.tsx              # Landing page
 │   └── inspector/page.tsx    # Inspector dashboard (main UI)
 ├── hooks/useInspectorFeed.ts # SSE connection hook
+├── tests/                    # Vitest unit + integration tests
 ├── app/globals.css           # Design tokens (Obsidian Lens system)
 └── DESIGN.md                 # Full design system spec
 ```
 
+## Before you open a PR
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+CI runs the same four steps. If you change anything in `server/`, add or update a test in `tests/` — `tests/proxy.test.mts` boots the real proxy against a fake upstream, so most behaviour can be asserted end to end.
+
 ## Making changes
+
+### Commit messages
+
+This repo uses [Conventional Commits](https://www.conventionalcommits.org/) — release-please reads
+them to decide the next version and to write the changelog, so the prefix matters:
+
+```
+feat: add status class filters          # minor bump, shows under Features
+fix: clear the reconnect timer          # patch bump, shows under Bug Fixes
+feat!: bind the API to loopback only    # breaking; minor while below 1.0
+docs: document the redact flag          # no bump
+chore: bump dev dependencies            # hidden from the changelog
+```
+
+Anything that changes the proxy's flags, default ports, API contract, capture entry shape, or MCP
+tool signatures is breaking — use `!` and explain the migration in the commit body.
 
 ### Branch naming
 ```
@@ -58,17 +89,10 @@ docs/short-description       # documentation only
 refactor/short-description   # code change without behaviour change
 ```
 
-### Commit messages
-Keep them short and use the present tense:
-```
-feat: add WebSocket inspection support
-fix: prevent SSE client leak on disconnect
-docs: update proxy architecture diagram
-```
-
 ### Code style
 - TypeScript for all new files in `app/` and `hooks/`
-- Plain `.mjs` for the proxy server — no TypeScript, no npm deps
+- Plain `.mjs` for everything in `server/` — no TypeScript
+- Keep `proxy.mjs`, `config.mjs`, and `capture.mjs` dependency-free; `mcp.mjs` is the only server file allowed npm deps
 - Tailwind CSS for styling — no new CSS files unless updating design tokens
 - Follow the existing patterns in the file you're editing
 
