@@ -13,14 +13,60 @@ import {
   MultipartViewer,
 } from "./SyntaxHighlighters";
 
-export function BodyViewer({ body, contentType, title = "Body" }: { body: unknown; contentType?: string; title?: string }) {
+export function BodyViewer({
+  body,
+  contentType,
+  title = "Body",
+  size,
+  binary = false,
+  truncated = false,
+}: {
+  body: unknown;
+  contentType?: string;
+  title?: string;
+  /** Wire size in bytes, from the proxy. Falls back to the rendered length. */
+  size?: number;
+  /** Body was non-text (image, archive, …) and deliberately not captured. */
+  binary?: boolean;
+  /** Body exceeded the capture cap; what is shown is the head of it. */
+  truncated?: boolean;
+}) {
+  if (binary) {
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-[10px] font-semibold text-[#908fa0] uppercase tracking-[0.05em]">{title}</span>
+          <span className="text-[10px] font-mono text-[#908fa0]/60">{formatBytes(size)}</span>
+        </div>
+        <div className="rounded-sm bg-[#0e0e10] px-4 py-6 text-center">
+          <p className="text-sm text-[#908fa0]">Binary body not captured</p>
+          <p className="text-[11px] text-[#908fa0]/50 mt-1 font-mono">
+            {contentType ?? "unknown content type"} · {formatBytes(size)}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (body === null || body === undefined)
     return <p className="text-sm italic text-[#908fa0]">No body</p>;
 
   const format = detectFormat(body, contentType);
   const label = FORMAT_LABELS[format];
   const rawText = getRawText(body);
-  const sizeStr = formatBytes(rawText.length);
+  const sizeStr = formatBytes(size ?? rawText.length);
+
+  if (truncated) {
+    return (
+      <div>
+        <div className="mb-2 rounded-sm bg-[#f59e0b]/10 px-3 py-2 text-[11px] text-[#f59e0b]">
+          Truncated — showing the first {formatBytes(rawText.length)} of {sizeStr}. Raise the cap with{" "}
+          <code className="font-mono">--max-body-bytes</code>.
+        </div>
+        <BodyViewer body={body} contentType={contentType} title={title} size={rawText.length} />
+      </div>
+    );
+  }
 
   // GraphQL-over-JSON
   if (format === "graphql-json") {

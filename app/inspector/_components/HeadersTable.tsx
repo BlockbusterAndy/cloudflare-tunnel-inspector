@@ -1,5 +1,7 @@
 "use client";
 
+import { isRedacted } from "./helpers";
+
 export function HeadersTable({ headers, title }: { headers: Record<string, string>; title: string }) {
   const entries = Object.entries(headers);
   if (entries.length === 0)
@@ -11,7 +13,16 @@ export function HeadersTable({ headers, title }: { headers: Record<string, strin
         {entries.map(([k, v]) => (
           <div key={k} className="flex justify-between py-1.5 gap-4">
             <span className="font-mono text-sm text-[#c0c1ff] shrink-0">{k}</span>
-            <span className="font-mono text-sm text-[#c7c4d7] text-right truncate">{String(v)}</span>
+            {isRedacted(v) ? (
+              <span
+                className="font-mono text-sm text-[#908fa0] italic shrink-0"
+                title="Hidden by --redact so this view is safe to share"
+              >
+                redacted
+              </span>
+            ) : (
+              <span className="font-mono text-sm text-[#c7c4d7] text-right truncate">{String(v)}</span>
+            )}
           </div>
         ))}
       </div>

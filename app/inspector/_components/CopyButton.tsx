@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 
-export function CopyButton({ text }: { text: string }) {
+export function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(() => {
@@ -16,7 +16,7 @@ export function CopyButton({ text }: { text: string }) {
     <button
       onClick={handleCopy}
       className="flex items-center gap-1 px-2 py-1 rounded-sm text-[10px] font-mono text-[#908fa0] hover:text-[#c7c4d7] hover:bg-[#39393b] transition-colors"
-      title="Copy to clipboard"
+      title={`${label} to clipboard`}
     >
       {copied ? (
         <>
@@ -30,7 +30,7 @@ export function CopyButton({ text }: { text: string }) {
           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
           </svg>
-          Copy
+          {label}
         </>
       )}
     </button>
